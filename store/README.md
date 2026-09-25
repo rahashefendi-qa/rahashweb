@@ -152,12 +152,13 @@ Other useful commands: `npm run typecheck`, `npm run lint`, `npm run build && np
 2. **Images:** create a free [Cloudinary](https://cloudinary.com) account and copy the cloud name, API key and API secret.
 3. **Email:** see section 8.
 4. **Vercel:** import this GitHub repository and set **Root Directory = `store`**. Add every variable from `.env.example` under *Settings → Environment Variables*, and set `NEXT_PUBLIC_SITE_URL` to your real domain.
-5. Deploy. The `vercel-build` script runs `prisma migrate deploy` automatically.
-6. Create your admin account from your computer, pointing at the production database:
+5. Deploy. The `vercel-build` script (`scripts/vercel-build.sh`) runs the migrations automatically. It also runs `scripts/bootstrap.ts`, which creates the first admin from `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD` (only while no admin exists) and adds the example products when `SEED_EXAMPLE_PRODUCTS=true` and the store is empty.
+6. Alternatively, create the admin from your computer against the production database:
    ```bash
    DATABASE_URL="<production DIRECT_URL>" npm run admin:create -- --email you@example.com --password "…"
    ```
-   Optional example data: `DATABASE_URL="<production DIRECT_URL>" npm run db:seed`
+
+**Shortcut on Vercel:** instead of setting up Supabase and Cloudinary yourself, open the project's **Storage** tab and create a **Neon** (Postgres) database and a **Blob** store. Vercel adds `DATABASE_URL`, `DATABASE_URL_UNPOOLED` and `BLOB_READ_WRITE_TOKEN` for you, and the build script uses them automatically.
 7. Add your domain in Vercel → *Domains*.
 
 Any Node host (Railway, Render, a VPS) also works: run `npm run build`, `npx prisma migrate deploy` and `npm start`. Cloudinary is required on hosts without a persistent disk.

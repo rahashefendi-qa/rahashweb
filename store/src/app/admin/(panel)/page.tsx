@@ -30,7 +30,7 @@ export default async function DashboardPage() {
   if (!emailProvider() || !process.env.EMAIL_FROM) warnings.push({ text: "Email is not configured — order alerts cannot be sent. Set RESEND_API_KEY (or SMTP_*) and EMAIL_FROM." });
   if (!settings.adminEmail && !process.env.ADMIN_EMAIL) warnings.push({ text: "No admin email set for new-order alerts.", href: "/admin/settings" });
   if (settings.wishMoneyEnabled && !settings.wishMoneyNumber) warnings.push({ text: "Wish Money is enabled but no number is set — it is hidden at checkout.", href: "/admin/settings" });
-  if (storageMode() === "unconfigured") warnings.push({ text: "Image storage is not configured — set the CLOUDINARY_* variables to upload product photos." });
+  if (storageMode() === "unconfigured") warnings.push({ text: "Image storage is not configured — set the CLOUDINARY_* variables or connect a Vercel Blob store to upload product photos." });
 
   return (
     <>

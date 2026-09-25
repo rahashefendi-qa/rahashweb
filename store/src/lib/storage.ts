@@ -4,10 +4,12 @@ import { mkdir, unlink, writeFile } from "fs/promises";
 import path from "path";
 import sharp from "sharp";
 import { v2 as cloudinary } from "cloudinary";
+import { del as blobDel, put as blobPut } from "@vercel/blob";
 
 /**
  * Image storage.
- *  - Production: Cloudinary (set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET).
+ *  - Production: Cloudinary (set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET)
+ *    or Vercel Blob (connect a Blob store to the Vercel project → BLOB_READ_WRITE_TOKEN).
  *  - Local development fallback: files written to ./uploads and served by /media/[file].
  *    (Serverless hosts such as Vercel have no persistent disk, so Cloudinary is required there.)
  * Every upload is re-encoded with sharp: EXIF stripped, auto-rotated, max 2000px, WebP.
@@ -31,8 +33,9 @@ function configureCloudinary() {
   });
 }
 
-export function storageMode(): "cloudinary" | "local" | "unconfigured" {
+export function storageMode(): "cloudinary" | "vercel-blob" | "local" | "unconfigured" {
   if (cloudinaryConfigured()) return "cloudinary";
+  if (process.env.BLOB_READ_WRITE_TOKEN) return "vercel-blob";
   if (process.env.NODE_ENV !== "production" || process.env.ALLOW_LOCAL_UPLOADS === "true") return "local";
   return "unconfigured";
 }
@@ -61,6 +64,15 @@ export async function storeImage(input: Buffer, folder = "products"): Promise<St
     return { url: result.secure_url, storageId: `cloudinary:${result.public_id}`, width: result.width, height: result.height };
   }
 
+  if (mode === "vercel-blob") {
+    const blob = await blobPut(`${folder}/${randomUUID()}.webp`, data, {
+      access: "public",
+      contentType: "image/webp",
+      cacheControlMaxAge: 31536000,
+    });
+    return { url: blob.url, storageId: `blob:${blob.url}`, width: info.width, height: info.height };
+  }
+
   if (mode === "local") {
     await mkdir(LOCAL_UPLOAD_DIR, { recursive: true });
     const name = `${randomUUID()}.webp`;
@@ -68,7 +80,7 @@ export async function storeImage(input: Buffer, folder = "products"): Promise<St
     return { url: `/media/${name}`, storageId: `local:${name}`, width: info.width, height: info.height };
   }
 
-  throw new Error("Image storage is not configured. Set the CLOUDINARY_* environment variables.");
+  throw new Error("Image storage is not configured. Set the CLOUDINARY_* variables or connect a Vercel Blob store.");
 }
 
 export async function deleteImage(storageId: string | null | undefined) {
@@ -77,6 +89,8 @@ export async function deleteImage(storageId: string | null | undefined) {
     if (storageId.startsWith("cloudinary:") && cloudinaryConfigured()) {
       configureCloudinary();
       await cloudinary.uploader.destroy(storageId.slice("cloudinary:".length));
+    } else if (storageId.startsWith("blob:") && process.env.BLOB_READ_WRITE_TOKEN) {
+      await blobDel(storageId.slice("blob:".length));
     } else if (storageId.startsWith("local:")) {
       const name = path.basename(storageId.slice("local:".length));
       await unlink(path.join(LOCAL_UPLOAD_DIR, name));
