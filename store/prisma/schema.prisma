@@ -1,0 +1,225 @@
+// YOUR BRAND — e-commerce data model
+// Money is stored as integer cents (USD by default) to avoid floating-point errors.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Catalog ────────────────────────────────────────────────────────────────
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  description String?
+  position    Int       @default(0)
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Product {
+  id             String         @id @default(cuid())
+  name           String
+  slug           String         @unique
+  description    String         @default("")
+  details        String         @default("") // one bullet per line
+  price          Int // cents
+  salePrice      Int? // cents, optional
+  stock          Int            @default(0)
+  soldOut        Boolean        @default(false) // manual override
+  featured       Boolean        @default(false)
+  newArrival     Boolean        @default(false)
+  active         Boolean        @default(true) // hidden from the store when false
+  color          String?
+  material       String?
+  dimensions     String?
+  strapDetails   String?
+  seoTitle       String?
+  seoDescription String?
+  categoryId     String?
+  category       Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  images         ProductImage[]
+  orderItems     OrderItem[]
+  notifyRequests StockNotification[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([categoryId])
+  @@index([active, featured])
+  @@index([createdAt])
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  storageId String? // Cloudinary public_id or local file name — used for deletion
+  alt       String?
+  width     Int?
+  height    Int?
+  position  Int      @default(0) // 0 = main image
+  createdAt DateTime @default(now())
+
+  @@index([productId, position])
+}
+
+model StockNotification {
+  id         String    @id @default(cuid())
+  productId  String
+  product    Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  email      String?
+  phone      String?
+  notifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([productId, notifiedAt])
+}
+
+// ─── Customers & orders ─────────────────────────────────────────────────────
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String   @unique // normalised +961XXXXXXXX
+  email     String?
+  orders    Order[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  COD
+  WISH_MONEY
+}
+
+model Order {
+  id               String        @id @default(cuid())
+  number           Int           @unique @default(autoincrement()) // human-facing order number, starts at 1001
+  publicToken      String        @unique // unguessable token for the confirmation page
+  status           OrderStatus   @default(PENDING)
+  customerId       String
+  customer         Customer      @relation(fields: [customerId], references: [id])
+  // snapshot of the delivery details at the time of ordering
+  customerName     String
+  customerPhone    String
+  customerEmail    String?
+  governorate      String
+  city             String
+  area             String
+  address          String
+  building         String?
+  customerNotes    String?
+  paymentMethod    PaymentMethod
+  paymentReference String?
+  subtotal         Int // cents
+  deliveryFee      Int // cents
+  total            Int // cents
+  currency         String        @default("USD")
+  stockDeducted    Boolean       @default(false)
+  internalNotes    String?
+  adminEmailSentAt DateTime?
+  adminEmailError  String?
+  customerEmailSentAt DateTime?
+  items            OrderItem[]
+  history          OrderStatusChange[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([status, createdAt])
+  @@index([createdAt])
+  @@index([customerId])
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName String // snapshot
+  productSlug String?
+  imageUrl    String?
+  unitPrice   Int // cents, snapshot
+  quantity    Int
+  lineTotal   Int // cents
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model OrderStatusChange {
+  id        String      @id @default(cuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  from      OrderStatus?
+  to        OrderStatus
+  note      String?
+  byAdmin   String? // admin email
+  createdAt DateTime    @default(now())
+
+  @@index([orderId])
+}
+
+// ─── Store configuration ────────────────────────────────────────────────────
+
+model Settings {
+  id                 Int      @id @default(1)
+  storeName          String   @default("YOUR BRAND")
+  tagline            String   @default("Carry Confidence.")
+  logoUrl            String?
+  heroImageUrl       String?  // homepage hero image (falls back to the bundled placeholder)
+  storeEmail         String?  // public contact email
+  adminEmail         String?  // where new-order alerts are sent
+  phone              String?
+  whatsapp           String?
+  currency           String   @default("USD")
+  deliveryFee        Int      @default(400) // cents — default fee
+  governorateFees    Json     @default("{}") // { "Beirut": 300, ... } overrides in cents
+  freeDeliveryOver   Int? // cents — optional free-delivery threshold
+  wishMoneyEnabled   Boolean  @default(true)
+  wishMoneyName      String?  // account holder name
+  wishMoneyNumber    String?  // Wish Money number / account
+  wishMoneyInstructions String @default("Send the order total to the Wish Money account below, then enter the transfer reference so we can match your payment.")
+  codEnabled         Boolean  @default(true)
+  instagramUrl       String?
+  facebookUrl        String?
+  tiktokUrl          String?
+  updatedAt          DateTime @updatedAt
+}
+
+// ─── Admin auth ─────────────────────────────────────────────────────────────
+
+model AdminUser {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  name           String?
+  passwordHash   String
+  sessionVersion Int       @default(0) // bump to revoke every active session
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+// Fixed-window rate limiter shared across server instances
+model RateLimit {
+  key         String   @id
+  count       Int
+  windowStart DateTime
+}
