@@ -15,7 +15,9 @@ export function slugify(input: string) {
 }
 
 export function siteUrl(path = "") {
-  const base = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
+  // On Vercel the production domain is available automatically if NEXT_PUBLIC_SITE_URL isn't set.
+  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  const base = (process.env.NEXT_PUBLIC_SITE_URL || (vercel ? `https://${vercel}` : "http://localhost:3000")).replace(/\/$/, "");
   return `${base}${path}`;
 }
 
